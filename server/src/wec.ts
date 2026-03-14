@@ -159,3 +159,127 @@ export async function applyPreset(index: number): Promise<void> {
 export async function applyRaw(rawPayload: string): Promise<void> {
   return wecPostRaw('/api/control', rawPayload);
 }
+
+// ── Device config ──────────────────────────────────────────────────────────────
+
+export interface DeviceConfig {
+  ip: string;
+  nm: string;
+  gw: string;
+  netfx: string;
+  wcm: string;
+  ssid: string;
+  univ: number;
+  rap: number;
+  chip: number;
+  t0h: number;
+  t1h: number;
+  tbit: number;
+  tres: number;
+  conv: number;
+  nout: number;
+  ports: Array<{ p: number; ts: number; l: number; rev: number }>;
+}
+
+export async function getConfig(): Promise<DeviceConfig> {
+  const res = await wecGet<{ config: DeviceConfig }>('/api/config');
+  return res.config;
+}
+
+// ── Light sensor ───────────────────────────────────────────────────────────────
+
+export interface LightSensorConfig {
+  level: number;    // current ambient light %
+  enabled: boolean; // auto on/off via sensor
+  llon: number;     // turn ON below this %
+  lton: number;     // ... for this many seconds
+  lsoff: number;    // 0 = level-based off, 1 = timer-based off
+  lloff: number;    // turn OFF above this %
+  ltoff: number;    // ... after this many seconds
+  lmoff: number;    // OR turn off after N minutes (timer mode)
+  pled: number;     // power LED brightness 1–100
+}
+
+export async function getLightSensor(): Promise<LightSensorConfig> {
+  const html = await wecGet<string>('/pconfig.html');
+
+  function numField(id: string): number {
+    const m = new RegExp(`id="${id}" value="(\\d+)"`).exec(html);
+    return m ? parseInt(m[1]) : 0;
+  }
+
+  const lspTag = /<input[^>]*id="lsp"[^>]*>/.exec(html)?.[0] ?? '';
+  const levelMatch = /currently (\d+)%/.exec(html);
+  const lsoffTimerChecked = /name="lsoff" value="1"[^>]*\bchecked\b/.test(html);
+
+  return {
+    level:   levelMatch ? parseInt(levelMatch[1]) : 0,
+    enabled: /\bchecked\b/.test(lspTag),
+    llon:    numField('llon'),
+    lton:    numField('lton'),
+    lsoff:   lsoffTimerChecked ? 1 : 0,
+    lloff:   numField('lloff'),
+    ltoff:   numField('ltoff'),
+    lmoff:   numField('lmoff'),
+    pled:    numField('pled'),
+  };
+}
+
+// ── Clock sync ────────────────────────────────────────────────────────────────
+
+// Map IANA timezone identifiers to the WEC3's limited timezone set
+const WEC_TZ_MAP: Record<string, string> = {
+  'America/New_York':             'America/Eastern',
+  'America/Detroit':              'America/Eastern',
+  'America/Toronto':              'America/Eastern',
+  'America/Indiana/Indianapolis': 'America/Eastern',
+  'America/Chicago':              'America/Central',
+  'America/Winnipeg':             'America/Central',
+  'America/Denver':               'America/Mountain',
+  'America/Edmonton':             'America/Mountain',
+  'America/Boise':                'America/Mountain',
+  'America/Phoenix':              'America/Arizona[MST]',
+  'America/Los_Angeles':          'America/Pacific',
+  'America/Vancouver':            'America/Pacific',
+  'America/Anchorage':            'America/Alaska',
+  'America/Halifax':              'America/Atlantic',
+  'America/St_Johns':             'America/Newfoundland',
+  'Asia/Hong_Kong':               'Asia/Hong_Kong',
+  'Asia/Manila':                  'Asia/Philippine',
+  'Asia/Seoul':                   'Asia/Korea',
+  'Asia/Shanghai':                'Asia/China',
+  'Asia/Taipei':                  'Asia/China',
+  'Asia/Tokyo':                   'Asia/Japan',
+  'Australia/Darwin':             'Australia/Central',
+  'Australia/Sydney':             'Australia/Eastern',
+  'Australia/Melbourne':          'Australia/Eastern',
+  'Australia/Brisbane':           'Australia/Eastern_Standard',
+  'Australia/Perth':              'Australia/Western',
+  'Europe/London':                'Europe/GMT',
+  'Europe/Dublin':                'Europe/GMT',
+  'Europe/Paris':                 'Europe/Central',
+  'Europe/Berlin':                'Europe/Central',
+  'Europe/Rome':                  'Europe/Central',
+  'Europe/Helsinki':              'Europe/Eastern',
+  'Europe/Athens':                'Europe/Eastern',
+  'Pacific/Auckland':             'Pacific/New_Zealand',
+  'Pacific/Honolulu':             'Pacific/Hawaii',
+};
+
+function toWecTz(iana: string): string {
+  return WEC_TZ_MAP[iana] ?? 'Etc/Universal';
+}
+
+export async function syncClock(ianaTimezone?: string): Promise<void> {
+  const now = new Date();
+  const tz = toWecTz(ianaTimezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+  await sendControl({
+    year: now.getFullYear(),
+    mon:  now.getMonth() + 1,
+    day:  now.getDate(),
+    hour: now.getHours(),
+    min:  now.getMinutes(),
+    sec:  now.getSeconds(),
+    tz,
+  });
+}

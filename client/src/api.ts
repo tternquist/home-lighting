@@ -43,4 +43,10 @@ export const api = {
   // Settings export / import
   exportSettings: () => get('/api/settings/export'),
   importSettings: (data: object) => post('/api/settings/import', data),
+
+  // Device
+  getDeviceConfig: () => get('/api/device/config'),
+  getDeviceSensor: () => get('/api/device/sensor'),
+  setDeviceSensor: (fields: object) => post('/api/device/sensor', fields),
+  syncClock: () => post('/api/device/sync-clock'),
 };

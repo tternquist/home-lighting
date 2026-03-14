@@ -3,6 +3,7 @@ import { LightingState } from './types';
 import Dashboard from './components/Dashboard';
 import HomeKitPage from './components/HomeKitPage';
 import SettingsPage from './components/SettingsPage';
+import DevicePage from './components/DevicePage';
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ||
@@ -46,6 +47,8 @@ export default function App() {
         <HomeKitPage onBack={() => setPage('dashboard')} />
       ) : page === 'settings' ? (
         <SettingsPage onBack={() => setPage('dashboard')} />
+      ) : page === 'device' ? (
+        <DevicePage onBack={() => setPage('dashboard')} />
       ) : state ? (
         <Dashboard state={state} mutate={mutate} connected={connected} onNavigate={setPage} />
       ) : (

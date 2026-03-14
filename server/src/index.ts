@@ -57,6 +57,7 @@ setInterval(poll, 2000);
 poll();
 wec.fetchPresets().catch(err => console.error('[presets] failed to load:', err.message));
 homekit.init(wec.sendControl, () => cachedState);
+wec.syncClock(storage.getLocation()?.timezone).catch(err => console.error('[clock] sync failed:', err.message));
 
 // Scheduler: apply preset or brightness on trigger
 scheduler.init(async (schedule) => {
@@ -291,6 +292,27 @@ app.put('/api/location', (req, res) => {
   storage.saveLocation(loc);
   res.json(loc);
 });
+
+// ── Device info, light sensor, clock sync ────────────────────────────────────
+
+app.get('/api/device/config', wrap(async (_req, res) => {
+  res.json(await wec.getConfig());
+}));
+
+app.get('/api/device/sensor', wrap(async (_req, res) => {
+  res.json(await wec.getLightSensor());
+}));
+
+app.post('/api/device/sensor', wrap(async (req, res) => {
+  await wec.sendControl(req.body as object);
+  res.json({ ok: true });
+}));
+
+app.post('/api/device/sync-clock', wrap(async (_req, res) => {
+  const loc = storage.getLocation();
+  await wec.syncClock(loc?.timezone ?? undefined);
+  res.json({ ok: true, syncedAt: new Date().toISOString() });
+}));
 
 // ── Settings export / import ──────────────────────────────────────────────────
 
