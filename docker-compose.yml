@@ -14,6 +14,7 @@ services:
     environment:
       PORT: "4001"
       WEC_URL: "http://192.168.7.6"   # address of your WEC3 controller
+      HAP_NAME: "Home Lighting"       # must be unique per instance on the network
       HAP_PIN: "031-45-154"           # HomeKit pairing code
       HAP_PORT: "47129"               # HomeKit accessory protocol port
 

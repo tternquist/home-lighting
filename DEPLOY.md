@@ -32,6 +32,7 @@ All configuration is via environment variables in `docker-compose.yml`:
 |-----------|---------------------|----------------------------------------|
 | `PORT`    | `4001`              | HTTP server port                       |
 | `WEC_URL` | `http://192.168.7.6`| URL of the WEC3 LED controller         |
+| `HAP_NAME`| `Home Lighting`     | Bridge display name — must be unique per instance on the LAN |
 | `HAP_PIN` | `031-45-154`        | HomeKit pairing code (digits only)     |
 | `HAP_PORT`| `47129`             | HomeKit accessory protocol (HAP) port  |
 

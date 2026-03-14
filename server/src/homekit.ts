@@ -4,6 +4,7 @@ import * as wec from './wec';
 
 const HAP_PIN = process.env.HAP_PIN || '031-45-154';
 const HAP_PORT = parseInt(process.env.HAP_PORT || '47129');
+const HAP_NAME = process.env.HAP_NAME || 'Home Lighting';
 const PERSIST_PATH = path.resolve(__dirname, '../data/hap-persist');
 
 // Track last non-zero brightness per channel (fxn 1 and 2)
@@ -143,7 +144,7 @@ export function init(
 
   HAPStorage.setCustomStoragePath(PERSIST_PATH);
 
-  const bridge = new Bridge('Home Lighting', uuid.generate('home-lighting-bridge'));
+  const bridge = new Bridge(HAP_NAME, uuid.generate(`home-lighting-bridge-${HAP_NAME}`));
   setupChannel(bridge, 1, 'Channel 1');
   setupChannel(bridge, 2, 'Channel 2');
 
@@ -154,7 +155,7 @@ export function init(
     category: Categories.BRIDGE,
   });
 
-  console.log(`[HomeKit] Bridge published on port ${HAP_PORT} — PIN: ${HAP_PIN}`);
+  console.log(`[HomeKit] Bridge "${HAP_NAME}" published on port ${HAP_PORT} — PIN: ${HAP_PIN}`);
 }
 
 export function notifyStateChange(state: wec.ControlState): void {
