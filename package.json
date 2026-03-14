@@ -1,0 +1,14 @@
+{
+  "name": "home-lighting",
+  "private": true,
+  "workspaces": ["server", "client"],
+  "scripts": {
+    "dev": "npm run build -w client && npm run dev -w server",
+    "dev:hot": "concurrently -n server,client -c cyan,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w server && npm run build -w client",
+    "start": "npm run build && node server/dist/index.js"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

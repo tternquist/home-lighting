@@ -1,0 +1,30 @@
+services:
+  home-lighting:
+    image: ghcr.io/tternquist/home-lighting:latest
+    build: .   # omit this line when pulling the published image
+    restart: unless-stopped
+
+    # host networking is required so that hap-nodejs can advertise the HomeKit
+    # bridge via mDNS (Bonjour/multicast). Docker's default bridge network
+    # blocks multicast, which would make the accessory undiscoverable in the
+    # Home app. With host networking the container shares the host's network
+    # stack directly, so no `ports:` mapping is needed.
+    network_mode: host
+
+    environment:
+      PORT: "4001"
+      WEC_URL: "http://192.168.7.6"   # address of your WEC3 controller
+      HAP_PIN: "031-45-154"           # HomeKit pairing code
+      HAP_PORT: "47129"               # HomeKit accessory protocol port
+
+    volumes:
+      # Persist presets, schedules, location, and HomeKit pairing data across
+      # container rebuilds. Delete hap-persist/ inside here to force re-pairing.
+      - ./server/data:/app/server/data
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4001/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s

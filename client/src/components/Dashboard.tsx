@@ -1,0 +1,105 @@
+import { useEffect, useState } from 'react';
+import { LightingState, Preset } from '../types';
+import { api } from '../api';
+import { useDebounce } from '../hooks/useDebounce';
+import ChannelCard from './ChannelCard';
+import PresetGrid from './PresetGrid';
+import SchedulePanel from './SchedulePanel';
+import DebugLog from './DebugLog';
+
+interface Props {
+  state: LightingState;
+  mutate: (updater: (s: LightingState) => LightingState) => void;
+  connected: boolean;
+  onNavigate: (page: string) => void;
+}
+
+export default function Dashboard({ state, mutate, connected, onNavigate }: Props) {
+  const [presets, setPresets] = useState<Preset[]>([]);
+  const sendMasterBrightness = useDebounce((v: number) => api.masterBrightness(v), 120);
+
+  async function loadPresets() {
+    const p = await api.getPresets().catch(() => []);
+    setPresets(p);
+  }
+
+  useEffect(() => { loadPresets(); }, []);
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white">
+      <header className="sticky top-0 z-10 bg-gray-950/80 backdrop-blur border-b border-gray-800 px-5 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Home Lighting</h1>
+          <p className="text-xs text-gray-500">WEC3 · wec-e364</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => onNavigate('homekit')}
+            className="text-gray-400 hover:text-white transition-colors"
+            title="HomeKit Setup"
+            aria-label="HomeKit Setup"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+              <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h4a1 1 0 001-1v-3h2v3a1 1 0 001 1h4a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z" />
+            </svg>
+          </button>
+          <div className="flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-500'}`} />
+            <span className="text-xs text-gray-400">{connected ? 'Live' : 'Reconnecting…'}</span>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 py-6 pb-16 space-y-6">
+        {/* Master brightness */}
+        <div className="bg-gray-900 rounded-2xl p-5">
+          <div className="flex justify-between items-center mb-4">
+            <span className="font-medium">Master Brightness</span>
+            <span className="text-amber-400 font-mono text-sm">{state.mint}%</span>
+          </div>
+          <input
+            type="range" min={0} max={100} value={state.mint}
+            onChange={e => {
+              const mint = parseInt(e.target.value);
+              mutate(s => ({ ...s, mint }));
+              sendMasterBrightness(mint);
+            }}
+            className="w-full"
+          />
+        </div>
+
+        {/* Channels */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {state.e.map(ch => (
+            <ChannelCard
+              key={ch.fxn}
+              channel={ch}
+              onUpdate={updated =>
+                mutate(s => ({ ...s, e: s.e.map(c => (c.fxn === updated.fxn ? updated : c)) }))
+              }
+            />
+          ))}
+        </div>
+
+        {/* Presets */}
+        <PresetGrid
+          presets={presets}
+          onApplied={loadPresets}
+          onSave={async name => {
+            await api.savePreset(name);
+            await loadPresets();
+          }}
+          onDelete={async id => {
+            await api.deletePreset(id);
+            await loadPresets();
+          }}
+        />
+
+        {/* Schedules */}
+        <SchedulePanel presets={presets} />
+      </main>
+
+      <DebugLog />
+    </div>
+  );
+}
