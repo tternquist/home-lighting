@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { LightingState } from './types';
 import Dashboard from './components/Dashboard';
 import HomeKitPage from './components/HomeKitPage';
+import SettingsPage from './components/SettingsPage';
 
 const WS_URL =
   import.meta.env.VITE_WS_URL ||
@@ -43,6 +44,8 @@ export default function App() {
     <div className="min-h-screen bg-gray-950">
       {page === 'homekit' ? (
         <HomeKitPage onBack={() => setPage('dashboard')} />
+      ) : page === 'settings' ? (
+        <SettingsPage onBack={() => setPage('dashboard')} />
       ) : state ? (
         <Dashboard state={state} mutate={mutate} connected={connected} onNavigate={setPage} />
       ) : (

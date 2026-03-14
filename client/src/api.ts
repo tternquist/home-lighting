@@ -39,4 +39,8 @@ export const api = {
   // Location
   getLocation: () => get('/api/location'),
   saveLocation: (loc: object) => put('/api/location', loc),
+
+  // Settings export / import
+  exportSettings: () => get('/api/settings/export'),
+  importSettings: (data: object) => post('/api/settings/import', data),
 };

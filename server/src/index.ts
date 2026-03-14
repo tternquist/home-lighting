@@ -292,6 +292,45 @@ app.put('/api/location', (req, res) => {
   res.json(loc);
 });
 
+// ── Settings export / import ──────────────────────────────────────────────────
+
+app.get('/api/settings/export', (_req, res) => {
+  res.json({
+    version: '1',
+    exportedAt: new Date().toISOString(),
+    presets: storage.getPresets().filter(p => !p.builtIn),
+    schedules: storage.getSchedules(),
+    location: storage.getLocation(),
+  });
+});
+
+app.post('/api/settings/import', (req, res) => {
+  const { presets = [], schedules = [], location } = req.body as {
+    version?: string;
+    presets?: AppPreset[];
+    schedules?: Schedule[];
+    location?: Location | null;
+  };
+
+  for (const preset of presets) {
+    if (!preset.builtIn && preset.id && preset.name && preset.rawPayload) {
+      storage.savePreset(preset);
+    }
+  }
+
+  // Replace all schedules, assigning fresh UUIDs to avoid cross-instance conflicts
+  for (const s of storage.getSchedules()) storage.deleteSchedule(s.id);
+  for (const schedule of schedules) {
+    storage.saveSchedule({ ...schedule, id: uuidv4() });
+  }
+
+  if (location && typeof location.lat === 'number') {
+    storage.saveLocation(location);
+  }
+
+  res.json({ ok: true });
+});
+
 // ── SPA catch-all ─────────────────────────────────────────────────────────────
 
 app.get('*', (_req, res) => {
