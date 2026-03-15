@@ -3,7 +3,7 @@ import path from 'path';
 import { AppPreset, Schedule, Location } from './types';
 
 // __dirname = .../server/src — data lives one level up at .../server/data
-const DATA_DIR = path.resolve(__dirname, '../data');
+const DATA_DIR = process.env.DATA_DIR ?? path.resolve(__dirname, '../data');
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });

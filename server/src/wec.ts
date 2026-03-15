@@ -266,7 +266,7 @@ const WEC_TZ_MAP: Record<string, string> = {
   'Pacific/Honolulu':             'Pacific/Hawaii',
 };
 
-function toWecTz(iana: string): string {
+export function toWecTz(iana: string): string {
   return WEC_TZ_MAP[iana] ?? 'Etc/Universal';
 }
 

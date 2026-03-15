@@ -21,7 +21,7 @@ const channelServices: Record<number, Service> = {};
 
 // ── Color helpers ──────────────────────────────────────────────────────────────
 
-function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+export function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   s /= 100; v /= 100;
   const f = (n: number) => {
     const k = (n + h / 60) % 6;
@@ -30,11 +30,11 @@ function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
   return [Math.round(f(5) * 255), Math.round(f(3) * 255), Math.round(f(1) * 255)];
 }
 
-function rgbToHex(r: number, g: number, b: number): string {
+export function rgbToHex(r: number, g: number, b: number): string {
   return [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-function hexToHsv(hex: string): [number, number, number] {
+export function hexToHsv(hex: string): [number, number, number] {
   if (hex.startsWith('#')) hex = hex.slice(1);
   const r = parseInt(hex.slice(0, 2), 16) / 255;
   const g = parseInt(hex.slice(2, 4), 16) / 255;
@@ -55,7 +55,7 @@ function hexToHsv(hex: string): [number, number, number] {
 }
 
 /** Map a WEC3 color value to HomeKit [hue, saturation]. */
-function colorToHs(c: string): [number, number] {
+export function colorToHs(c: string): [number, number] {
   if (c === 'ww') return [38, 30];
   if (c === 'cw') return [210, 10];
   if (c === 'none') return [0, 0];

@@ -20,7 +20,7 @@ function getSunTime(trigger: 'sunrise' | 'sunset', loc: Location, date: Date): D
   return trigger === 'sunrise' ? times.sunrise : times.sunsetStart;
 }
 
-function triggerMinute(schedule: Schedule, loc: Location | null, now: Date): number | null {
+export function triggerMinute(schedule: Schedule, loc: Location | null, now: Date): number | null {
   if (schedule.trigger === 'time') {
     return schedule.offsetMinutes; // absolute minutes from midnight
   }
