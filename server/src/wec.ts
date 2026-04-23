@@ -68,7 +68,7 @@ function record(entry: LogEntry) {
 
 const client = axios.create({
   baseURL: WEC_BASE,
-  timeout: 5000,
+  timeout: 15000,
 });
 
 async function wecGet<T>(path: string): Promise<T> {
