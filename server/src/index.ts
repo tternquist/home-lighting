@@ -53,7 +53,7 @@ async function poll() {
   }
 }
 
-setInterval(poll, 2000);
+setInterval(poll, 60000);
 poll();
 wec.fetchPresets().catch(err => console.error('[presets] failed to load:', err.message));
 homekit.init(wec.sendControl, () => cachedState);
@@ -73,6 +73,8 @@ scheduler.init(async (schedule) => {
 
 wss.on('connection', ws => {
   if (cachedState) ws.send(JSON.stringify({ type: 'state', data: cachedState }));
+  // New client connected — refresh state so the UI isn't showing stale data.
+  poll();
 });
 
 const wrap = (fn: (req: Request, res: Response) => Promise<void>) =>
