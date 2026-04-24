@@ -8,7 +8,10 @@ import * as wec from './wec';
 import * as storage from './storage';
 import * as scheduler from './scheduler';
 import * as homekit from './homekit';
+import { logger, child } from './logger';
 import { AppPreset, Schedule, Location } from './types';
+
+const log = child('http');
 
 // __dirname = .../server/src — client dist is two levels up at .../client/dist
 const CLIENT_DIST = path.resolve(__dirname, '../../client/dist');
@@ -18,11 +21,18 @@ app.set('trust proxy', 1); // trust X-Forwarded-* headers from nginx
 app.use(cors());
 app.use(express.json());
 
-// Log every non-poll, non-debug request
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (!req.path.startsWith('/api/debug') && req.path !== '/api/health') {
-    console.log(`[HTTP] ${req.method} ${req.path}`, req.body && Object.keys(req.body).length ? req.body : '');
-  }
+// Log every non-poll, non-debug request with response status + latency
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api/debug') || req.path === '/api/health') return next();
+  const start = Date.now();
+  res.on('finish', () => {
+    const ms = Date.now() - start;
+    const body = req.body && Object.keys(req.body).length ? req.body : undefined;
+    const fields = { method: req.method, path: req.path, status: res.statusCode, ms, body };
+    if (res.statusCode >= 500) log.error(fields, 'request failed');
+    else if (res.statusCode >= 400) log.warn(fields, 'request client error');
+    else log.info(fields, 'request');
+  });
   next();
 });
 
@@ -55,9 +65,9 @@ async function poll() {
 
 setInterval(poll, 60000);
 poll();
-wec.fetchPresets().catch(err => console.error('[presets] failed to load:', err.message));
+wec.fetchPresets().catch(err => child('presets').error({ err }, 'failed to load presets'));
 homekit.init(wec.sendControl, () => cachedState);
-wec.syncClock(storage.getLocation()?.timezone).catch(err => console.error('[clock] sync failed:', err.message));
+wec.syncClock(storage.getLocation()?.timezone).catch(err => child('clock').error({ err }, 'clock sync failed'));
 
 // Scheduler: apply preset or brightness on trigger
 scheduler.init(async (schedule) => {
@@ -361,13 +371,15 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(CLIENT_DIST, 'index.html'));
 });
 
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('[ERROR]', err.message);
+app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+  log.error({ err, method: req.method, path: req.path }, 'unhandled request error');
   res.status(500).json({ error: err.message });
 });
 
 const PORT = parseInt(process.env.PORT || '4001');
 server.listen(PORT, () => {
-  console.log(`Home Lighting server → http://localhost:${PORT}`);
-  console.log(`WEC3 controller    → ${process.env.WEC_URL || 'http://192.168.7.6'}`);
+  logger.info(
+    { port: PORT, wecUrl: process.env.WEC_URL || 'http://192.168.7.6' },
+    'home-lighting server started',
+  );
 });

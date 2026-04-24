@@ -1,9 +1,12 @@
 import cron from 'node-cron';
 import * as SunCalc from 'suncalc';
 import { getSchedules, getLocation } from './storage';
+import { child } from './logger';
 import { Schedule, Location } from './types';
 
 type ActionFn = (schedule: Schedule) => Promise<void>;
+
+const log = child('scheduler');
 
 let executeAction: ActionFn = async () => {};
 
@@ -12,7 +15,7 @@ export function init(fn: ActionFn) {
 
   // Check every minute
   cron.schedule('* * * * *', () => checkSchedules());
-  console.log('[scheduler] started');
+  log.info('scheduler started');
 }
 
 function getSunTime(trigger: 'sunrise' | 'sunset', loc: Location, date: Date): Date {
@@ -45,9 +48,9 @@ function checkSchedules() {
     if (target === null) continue;
 
     if (Math.round(target) === currentMinute) {
-      console.log(`[scheduler] firing "${schedule.name}"`);
+      log.info({ scheduleId: schedule.id, name: schedule.name, action: schedule.action }, 'firing schedule');
       executeAction(schedule).catch(err =>
-        console.error(`[scheduler] error firing "${schedule.name}":`, err.message)
+        log.error({ err, scheduleId: schedule.id, name: schedule.name }, 'schedule execution failed')
       );
     }
   }

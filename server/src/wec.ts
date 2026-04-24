@@ -1,6 +1,8 @@
 import axios from 'axios';
+import { child } from './logger';
 
 const WEC_BASE = process.env.WEC_URL || 'http://192.168.7.6';
+const log = child('wec3');
 
 export interface Color {
   c: string; // hex | 'ww' | 'cw' | 'none'
@@ -52,18 +54,26 @@ export interface LogEntry {
   error?: string;
 }
 
-const log: LogEntry[] = [];
+const recentLog: LogEntry[] = [];
 
 export function getLog(): LogEntry[] {
-  return log;
+  return recentLog;
 }
 
 function record(entry: LogEntry) {
-  log.unshift(entry);
-  if (log.length > 100) log.pop();
-  const icon = entry.status === 'error' || (typeof entry.status === 'number' && entry.status >= 400) ? '✗' : '✓';
-  const payload = entry.payload ? ' ' + JSON.stringify(entry.payload) : '';
-  console.log(`[WEC3] ${icon} ${entry.method} ${entry.path}${payload} → ${entry.status} (${entry.ms}ms)`);
+  recentLog.unshift(entry);
+  if (recentLog.length > 100) recentLog.pop();
+  const fields = {
+    method: entry.method,
+    path: entry.path,
+    status: entry.status,
+    ms: entry.ms,
+    ...(entry.payload !== undefined ? { payload: entry.payload } : {}),
+    ...(entry.error ? { err: entry.error } : {}),
+  };
+  const failed = entry.status === 'error' || (typeof entry.status === 'number' && entry.status >= 400);
+  if (failed) log.error(fields, 'wec3 request failed');
+  else log.debug(fields, 'wec3 request');
 }
 
 const client = axios.create({
