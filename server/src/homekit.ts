@@ -1,6 +1,9 @@
 import { Accessory, Bridge, Categories, Characteristic, CharacteristicValue, HAPStorage, Service, uuid } from 'hap-nodejs';
 import path from 'path';
 import * as wec from './wec';
+import { child } from './logger';
+
+const log = child('homekit');
 
 const HAP_PIN = process.env.HAP_PIN || '031-45-154';
 const HAP_PORT = parseInt(process.env.HAP_PORT || '47129');
@@ -71,7 +74,7 @@ function flushColor(fxn: number): void {
   const hex = '#' + rgbToHex(r, g, b);
   _sendControl({ fxn, fx: 'Fixed Colors' })
     .then(() => _sendControl({ fxn, color: { i: 1, c: hex } }))
-    .catch(err => console.error('[HomeKit] color flush error:', (err as Error).message));
+    .catch(err => log.error({ err, fxn, hex }, 'color flush failed'));
 }
 
 // ── Accessory setup ────────────────────────────────────────────────────────────
@@ -155,7 +158,7 @@ export function init(
     category: Categories.BRIDGE,
   });
 
-  console.log(`[HomeKit] Bridge "${HAP_NAME}" published on port ${HAP_PORT} — PIN: ${HAP_PIN}`);
+  log.info({ bridgeName: HAP_NAME, port: HAP_PORT, pin: HAP_PIN }, 'HomeKit bridge published');
 }
 
 export function notifyStateChange(state: wec.ControlState): void {
