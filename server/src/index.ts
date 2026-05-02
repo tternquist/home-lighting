@@ -194,7 +194,8 @@ app.post('/api/channel/:ch/brightness', wrap(async (req, res) => {
 
 app.post('/api/channel/:ch/color/:slot', wrap(async (req, res) => {
   const fxn = parseInt(req.params.ch);
-  const i = parseInt(req.params.slot);
+  // WEC3 slot index is 1-based; UI/API uses 0-based.
+  const i = parseInt(req.params.slot) + 1;
   const { color } = req.body as { color: string };
   await wec.sendControl({ fxn, color: { i, c: color } });
   await poll();

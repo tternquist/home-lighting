@@ -3,6 +3,7 @@ import { ChannelState } from '../types';
 import { api } from '../api';
 import { useDebounce } from '../hooks/useDebounce';
 import ColorSlot from './ColorSlot';
+import ColorPicker from './ColorPicker';
 
 const EFFECTS = [
   'Bands', 'Bars', 'Blend', 'Chase', 'Circles', 'Color Change', 'Color Wave',
@@ -42,6 +43,7 @@ function SliderRow({ label, value, onChange }: SliderRowProps) {
 
 export default function ChannelCard({ channel, onUpdate }: Props) {
   const [showParams, setShowParams] = useState(false);
+  const [editingSlot, setEditingSlot] = useState<number | null>(null);
   const ch = channel.fxn;
 
   const sendBrightness = useDebounce((v: number) => api.channelBrightness(ch, v), 120);
@@ -93,22 +95,36 @@ export default function ChannelCard({ channel, onUpdate }: Props) {
       />
 
       {/* Colors */}
-      <div>
-        <p className="text-xs text-gray-400 mb-2">Colors</p>
+      <div className="space-y-3">
+        <div className="flex justify-between items-center">
+          <p className="text-xs text-gray-400">Colors</p>
+          <p className="text-[10px] text-gray-600">tap a slot to edit</p>
+        </div>
         <div className="flex gap-2 flex-wrap">
           {channel.colors.map((col, i) => (
             <ColorSlot
               key={i}
               index={i}
               color={col.c}
-              onChange={color => {
-                const colors = channel.colors.map((c, ci) => (ci === i ? { c: color } : c));
-                update({ colors });
-                api.channelColor(ch, i, color);
-              }}
+              active={editingSlot === i}
+              onSelect={() => setEditingSlot(editingSlot === i ? null : i)}
             />
           ))}
         </div>
+        {editingSlot !== null && (
+          <ColorPicker
+            slot={editingSlot}
+            color={channel.colors[editingSlot].c}
+            onChange={color => {
+              const colors = channel.colors.map((c, ci) =>
+                ci === editingSlot ? { c: color } : c
+              );
+              update({ colors });
+              api.channelColor(ch, editingSlot, color);
+            }}
+            onClose={() => setEditingSlot(null)}
+          />
+        )}
       </div>
 
       {/* Params toggle */}
