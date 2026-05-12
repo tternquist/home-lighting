@@ -123,8 +123,20 @@ async function wecPostRaw(path: string, rawBody: string): Promise<void> {
   }
 }
 
+// Device metadata (mac, model, firmware, uuid) is essentially static, so cache
+// the first successful response and coalesce concurrent fetches. The WEC3 is
+// occasionally slow; without this, every page load risks a 15s timeout.
+let cachedStatus: DeviceStatus | null = null;
+let inflightStatus: Promise<DeviceStatus> | null = null;
+
 export async function getStatus(): Promise<DeviceStatus> {
-  return wecGet('/api/status');
+  if (cachedStatus) return cachedStatus;
+  if (!inflightStatus) {
+    inflightStatus = wecGet<DeviceStatus>('/api/status')
+      .then(s => { cachedStatus = s; return s; })
+      .finally(() => { inflightStatus = null; });
+  }
+  return inflightStatus;
 }
 
 export async function getState(): Promise<ControlState> {
