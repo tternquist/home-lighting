@@ -63,6 +63,21 @@ async function poll() {
   }
 }
 
+// Coalesce post-mutation refreshes. Instead of polling once per command (which
+// floods the WEC3 with concurrent reads racing the writes), each mutation resets
+// a short trailing timer; a burst of commands collapses into a single poll that
+// reads the final settled state. The getState is serialized behind the writes by
+// wec.ts's queue, so it always observes the result of every preceding command.
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleRefresh(delay = 200) {
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = setTimeout(() => {
+    refreshTimer = null;
+    poll();
+  }, delay);
+}
+
 setInterval(poll, 60000);
 poll();
 wec.fetchPresets().catch(err => child('presets').error({ err }, 'failed to load presets'));
@@ -82,9 +97,13 @@ scheduler.init(async (schedule) => {
 });
 
 wss.on('connection', ws => {
-  if (cachedState) ws.send(JSON.stringify({ type: 'state', data: cachedState }));
-  // New client connected — refresh state so the UI isn't showing stale data.
-  poll();
+  if (cachedState) {
+    ws.send(JSON.stringify({ type: 'state', data: cachedState }));
+  } else {
+    // No state cached yet — fetch once. Coalesced so a burst of clients
+    // connecting at once produces a single read, not one read per client.
+    scheduleRefresh(0);
+  }
 });
 
 const wrap = (fn: (req: Request, res: Response) => Promise<void>) =>
@@ -172,7 +191,7 @@ app.get('/api/debug/log', (_req, res) => res.json(wec.getLog()));
 app.post('/api/master/brightness', wrap(async (req, res) => {
   const { brightness } = req.body as { brightness: number };
   await wec.sendControl({ mint: brightness });
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 
@@ -180,7 +199,7 @@ app.post('/api/channel/:ch/effect', wrap(async (req, res) => {
   const fxn = parseInt(req.params.ch);
   const { effect } = req.body as { effect: string };
   await wec.sendControl({ fxn, fx: effect });
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 
@@ -188,7 +207,7 @@ app.post('/api/channel/:ch/brightness', wrap(async (req, res) => {
   const fxn = parseInt(req.params.ch);
   const { brightness } = req.body as { brightness: number };
   await wec.sendControl({ fxn, int: brightness });
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 
@@ -198,7 +217,7 @@ app.post('/api/channel/:ch/color/:slot', wrap(async (req, res) => {
   const i = parseInt(req.params.slot) + 1;
   const { color } = req.body as { color: string };
   await wec.sendControl({ fxn, color: { i, c: color } });
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 
@@ -206,7 +225,7 @@ app.post('/api/channel/:ch/param', wrap(async (req, res) => {
   const fxn = parseInt(req.params.ch);
   const { name, value } = req.body as { name: string; value: string | number };
   await wec.sendControl({ fxn, [name]: String(value) });
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 
@@ -230,7 +249,7 @@ app.get('/api/presets', (_req, res) => {
 
 app.post('/api/presets/:id/apply', wrap(async (req, res) => {
   await applyPresetById(req.params.id);
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 
@@ -256,7 +275,7 @@ app.delete('/api/presets/:id', (req, res) => {
 
 app.post('/api/shows/:id/play', wrap(async (req, res) => {
   await wec.sendControl({ fx: `Show ${req.params.id}` });
-  await poll();
+  scheduleRefresh();
   res.json({ ok: true });
 }));
 

@@ -81,46 +81,66 @@ const client = axios.create({
   timeout: 15000,
 });
 
-async function wecGet<T>(path: string): Promise<T> {
-  const start = Date.now();
-  try {
-    const res = await client.get<T>(path);
-    record({ ts: new Date().toISOString(), method: 'GET', path, status: res.status, ms: Date.now() - start });
-    return res.data;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    record({ ts: new Date().toISOString(), method: 'GET', path, status: 'error', ms: Date.now() - start, error: msg });
-    throw err;
-  }
+// The WEC3 is a tiny embedded HTTP server: it answers sequential requests in
+// ~30ms but degrades badly when requests overlap — latency balloons to multiple
+// seconds and responses can come back out of order, which corrupts state reads.
+// Serialize ALL access through a single promise chain so only one request is
+// ever in flight. This keeps the controller fast and keeps reads consistent.
+let queue: Promise<unknown> = Promise.resolve();
+
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+  const run = queue.then(task, task);
+  // Keep the chain alive after either outcome without leaking the rejection.
+  queue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function wecGet<T>(path: string): Promise<T> {
+  return enqueue(async () => {
+    const start = Date.now();
+    try {
+      const res = await client.get<T>(path);
+      record({ ts: new Date().toISOString(), method: 'GET', path, status: res.status, ms: Date.now() - start });
+      return res.data;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record({ ts: new Date().toISOString(), method: 'GET', path, status: 'error', ms: Date.now() - start, error: msg });
+      throw err;
+    }
+  });
 }
 
 // Send a JSON-serialisable object
-async function wecPost(path: string, payload: object): Promise<void> {
-  const start = Date.now();
-  try {
-    const res = await client.post(path, payload);
-    record({ ts: new Date().toISOString(), method: 'POST', path, payload, status: res.status, ms: Date.now() - start });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    record({ ts: new Date().toISOString(), method: 'POST', path, payload, status: 'error', ms: Date.now() - start, error: msg });
-    throw err;
-  }
+function wecPost(path: string, payload: object): Promise<void> {
+  return enqueue(async () => {
+    const start = Date.now();
+    try {
+      const res = await client.post(path, payload);
+      record({ ts: new Date().toISOString(), method: 'POST', path, payload, status: res.status, ms: Date.now() - start });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record({ ts: new Date().toISOString(), method: 'POST', path, payload, status: 'error', ms: Date.now() - start, error: msg });
+      throw err;
+    }
+  });
 }
 
 // Send a raw string body exactly as the WEC3 web UI does (some preset payloads are malformed JSON)
-async function wecPostRaw(path: string, rawBody: string): Promise<void> {
-  const start = Date.now();
-  try {
-    const res = await client.post(path, rawBody, {
-      headers: { 'Content-Type': 'text/plain' },
-      transformRequest: [(data: string) => data],
-    });
-    record({ ts: new Date().toISOString(), method: 'POST', path, payload: rawBody, status: res.status, ms: Date.now() - start });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    record({ ts: new Date().toISOString(), method: 'POST', path, payload: rawBody, status: 'error', ms: Date.now() - start, error: msg });
-    throw err;
-  }
+function wecPostRaw(path: string, rawBody: string): Promise<void> {
+  return enqueue(async () => {
+    const start = Date.now();
+    try {
+      const res = await client.post(path, rawBody, {
+        headers: { 'Content-Type': 'text/plain' },
+        transformRequest: [(data: string) => data],
+      });
+      record({ ts: new Date().toISOString(), method: 'POST', path, payload: rawBody, status: res.status, ms: Date.now() - start });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      record({ ts: new Date().toISOString(), method: 'POST', path, payload: rawBody, status: 'error', ms: Date.now() - start, error: msg });
+      throw err;
+    }
+  });
 }
 
 // Device metadata (mac, model, firmware, uuid) is essentially static, so cache
