@@ -12,6 +12,12 @@ const PERSIST_PATH = path.resolve(__dirname, '../data/hap-persist');
 
 // Track last non-zero brightness per channel (fxn 1 and 2)
 const lastBrightness: Record<number, number> = {};
+// Track last real (non-"Off") effect per channel, so turning a channel back on
+// can restore the effect it had rather than leaving it disabled.
+const lastEffect: Record<number, string> = {};
+// Track last non-zero master brightness, so turning any channel on can restore
+// the global dimmer if it was set to 0 (which makes everything dark).
+let lastMasterBrightness = 100;
 // Pending hue/saturation values waiting for debounce flush
 const pendingHue: Record<number, number> = {};
 const pendingSat: Record<number, number> = {};
@@ -57,6 +63,20 @@ export function hexToHsv(hex: string): [number, number, number] {
   return [h, s, v];
 }
 
+/**
+ * Whether a channel is actually emitting light. The WEC3 has three independent
+ * ways a channel can be dark, and HomeKit must reflect all of them or it will
+ * report a channel "On" while nothing is lit:
+ *   - master brightness (mint) is 0 → everything is off
+ *   - the channel effect is "Off" → channel disabled regardless of brightness
+ *   - the channel brightness (int) is 0
+ */
+export function channelIsOn(state: wec.ControlState | null, fxn: number): boolean {
+  if (!state || state.mint <= 0) return false;
+  const ch = state.e.find(c => c.fxn === fxn);
+  return !!ch && ch.fx !== 'Off' && ch.int > 0;
+}
+
 /** Map a WEC3 color value to HomeKit [hue, saturation]. */
 export function colorToHs(c: string): [number, number] {
   if (c === 'ww') return [38, 30];
@@ -64,6 +84,20 @@ export function colorToHs(c: string): [number, number] {
   if (c === 'none') return [0, 0];
   const [h, s] = hexToHsv(c);
   return [h, s];
+}
+
+/**
+ * Turn a channel on at the given brightness, undoing whichever of the three
+ * "off" conditions currently apply: restore the master dimmer if it's at 0,
+ * restore the channel's last real effect if it was disabled, then set brightness.
+ * Sends are serialized by wec.ts's request queue.
+ */
+async function applyChannelOn(fxn: number, int: number): Promise<void> {
+  const state = _getState();
+  const ch = state?.e.find(c => c.fxn === fxn);
+  if (!state || state.mint <= 0) await _sendControl({ mint: lastMasterBrightness || 100 });
+  if (ch?.fx === 'Off') await _sendControl({ fxn, fx: lastEffect[fxn] ?? 'Fixed Colors' });
+  await _sendControl({ fxn, int });
 }
 
 /** Flush accumulated hue+saturation to the WEC3 after debounce. */
@@ -86,13 +120,10 @@ function setupChannel(bridge: Bridge, fxn: number, name: string): void {
   channelServices[fxn] = service;
 
   service.getCharacteristic(Characteristic.On)
-    .onGet((): CharacteristicValue => {
-      const ch = _getState()?.e.find(c => c.fxn === fxn);
-      return (ch?.int ?? 0) > 0;
-    })
+    .onGet((): CharacteristicValue => channelIsOn(_getState(), fxn))
     .onSet(async (value: CharacteristicValue) => {
       if (value) {
-        await _sendControl({ fxn, int: lastBrightness[fxn] ?? 100 });
+        await applyChannelOn(fxn, lastBrightness[fxn] ?? 100);
       } else {
         await _sendControl({ fxn, int: 0 });
       }
@@ -105,8 +136,12 @@ function setupChannel(bridge: Bridge, fxn: number, name: string): void {
     })
     .onSet(async (value: CharacteristicValue) => {
       const bri = value as number;
-      if (bri > 0) lastBrightness[fxn] = bri;
-      await _sendControl({ fxn, int: bri });
+      if (bri > 0) {
+        lastBrightness[fxn] = bri;
+        await applyChannelOn(fxn, bri);
+      } else {
+        await _sendControl({ fxn, int: 0 });
+      }
     });
 
   service.getCharacteristic(Characteristic.Hue)
@@ -162,11 +197,17 @@ export function init(
 }
 
 export function notifyStateChange(state: wec.ControlState): void {
+  // Seed restore-state from observed reality so on/off toggles can undo it.
+  if (state.mint > 0) lastMasterBrightness = state.mint;
+
   for (const ch of state.e) {
+    if (ch.fx !== 'Off') lastEffect[ch.fxn] = ch.fx;
+    if (ch.int > 0) lastBrightness[ch.fxn] = ch.int;
+
     const service = channelServices[ch.fxn];
     if (!service) continue;
 
-    service.getCharacteristic(Characteristic.On).updateValue(ch.int > 0);
+    service.getCharacteristic(Characteristic.On).updateValue(channelIsOn(state, ch.fxn));
     service.getCharacteristic(Characteristic.Brightness).updateValue(ch.int);
 
     const first = ch.colors.find(c => c.c !== 'none');
